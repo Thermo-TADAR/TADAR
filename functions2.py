@@ -3,21 +3,12 @@ import cv2
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
-from skimage.segmentation import clear_border
+# from skimage.segmentation import clear_border
 from skimage import measure
 from skimage.measure import label,regionprops
 from scipy import ndimage as ndi
-from scipy.ndimage import measurements, center_of_mass, binary_dilation, zoom
-import plotly.graph_objects as go
-from skimage.transform import resize
-import sys
-import argparse
 from tqdm import tqdm
-import os
-import math
-import paho.mqtt.client as mqtt
 import ast
-from collections import Counter
 import numba as nb
 from skimage.filters import threshold_multiotsu
 from scipy import signal
@@ -30,72 +21,6 @@ from sklearn.tree import DecisionTreeRegressor
 from sklearn.ensemble import AdaBoostRegressor, HistGradientBoostingRegressor, GradientBoostingRegressor
 
 
-
-# Using for IRA sensor data receiving 
-class Sensor():
-    def __init__(self, mqtt_brocker, mqtt_port,username, pw, topic, sensor_type) -> None:
-        self.mqtt_brocker = mqtt_brocker
-        self.mqtt_port = mqtt_port
-        self.username = username
-        self.pw = pw
-        self.topic = topic
-        self.sensor_type = sensor_type
-        self.client_name = topic.replace("/","_")
-        self.client = mqtt.Client(self.client_name)
-
-        if self.sensor_type == 0: # the sensor is MLX90640
-            self.data = {
-                "Onboard_timestamp": 0,
-                "Ambient_temperature": 20.0,
-                "Detected_temperature": np.ones(768),
-                "data_flag": False,  # False: old data, True: new data
-            }
-        else:
-             # the sensor is MLX90641
-            self.data = {
-                "Onboard_timestamp": 0,
-                "Ambient_temperature": 20.0,
-                "Detected_temperature": np.ones(192),
-                "data_flag": False,  # False: old data, True: new data
-            }
-    
-    def connect_mqtt(self):
-        def on_connect(client, userdata, flags, rc):
-            if rc == 0:
-                print("Connected to MQTT Broker!")
-            else:
-                print("Failed to connect, return code %d\n", rc)
-        # Set Connecting Client ID
-        self.client.username_pw_set(self.username, self.pw)
-        self.client.on_connect = on_connect
-        self.client.connect(self.mqtt_brocker, self.mqtt_port)
-    
-    def subscribe_topic(self):
-        temp_data = self.data
-        def on_message(client, userdata, msg):
-            msg_str = str(msg.payload.decode("utf-8"))
-            try:
-                dict_data = ast.literal_eval(msg_str)
-                # esp32_timestamp = dict_data["Timestamp"]
-                temp_data["Onboard_timestamp"] = int(dict_data["loc_ts"])
-                temp_data["Ambient_temperature"] = float(dict_data["AT"])
-                temp_data["Detected_temperature"] = np.array(dict_data["data"])
-                temp_data["data_flag"] = True   # receive new data
-            except:
-                print(f"Received `{msg.payload.decode()}` from `{msg.topic}` topic")
-            # print(f"Received `{msg.payload.decode()}` from `{msg.topic}` topic")
-        self.client.subscribe(self.topic)
-        self.client.on_message = on_message
-    
-    def set_data_flag(self):
-        self.data["data_flag"] = False  # onece we used the data, set flag to Fasle
-    
-    def run(self):
-        self.client.loop_start()
-    
-    def get_data(self):
-        return self.data
-    
 
 # zone map only support the MLX90640-110 sensor
 def GetZoneMap():
@@ -1106,41 +1031,6 @@ class Estimator():
         return Y_predict
 
 
-# def SizeBasedDepthPredection(depth_list, size_list, buffer_size):
-#     if len(depth_list) != len(size_list):
-#         print("Error: depth_list and size_list should have the same length")
-#         return None
-#     current_W,current_H = size_list[-1]
-#     current_depth = depth_list[-1]
-#     predict_depth = []
-    
-#     if len(depth_list) > buffer_size:
-#         # from -2 to -buffer_size-1
-#         for i in range(-2,-buffer_size-1,-1):
-#             p_depth = depth_list[i]
-#             p_W,p_H = size_list[i]
-            
-#             W_ratio = current_W/p_W
-#             H_ratio = current_H/p_H
-#             ratio = min(W_ratio,H_ratio)
-#             predict_depth.append(p_depth*ratio)
-#     else:
-#         for i in range(len(depth_list)-1):
-#             p_depth = depth_list[i]
-#             p_W,p_H = size_list[i]
-            
-#             W_ratio = current_W/p_W
-#             H_ratio = current_H/p_H
-#             ratio = min(W_ratio,H_ratio)
-#             predict_depth.append(p_depth*ratio) 
-#             predict_depth = predict_depth[::-1] 
-#     if len(predict_depth) < buffer_size:
-#         # padding with the current depth to make the length of the prediction buffer equal to buffer_size
-#         predict_depth = [current_depth]*(buffer_size-len(predict_depth)) + predict_depth
-#     return predict_depth    
-
-
-
 def SizeBasedDepthPredection(depth_list, size_list, buffer_size):
     # if len(depth_list) != len(size_list):
     #     print("Error: depth_list and size_list should have the same length")
@@ -1190,20 +1080,8 @@ def WeightsGenerate(buffersize):
 
     # Create an array of equally spaced integers
     x_values = np.linspace(mean - 3 * std_dev, mean + 3 * std_dev, num_points)
-
     # Calculate the corresponding discrete Gaussian probabilities
     y_values = discrete_gaussian(x_values, mean, std_dev)
-
-    # Plot the discrete Gaussian distribution
-    # plt.stem(x_values, y_values, basefmt='k', linefmt='r-', markerfmt='ro', use_line_collection=True)
-    # plt.xlabel('X-values')
-    # plt.ylabel('Probability')
-    # plt.title('Discrete Gaussian Distribution')
-    # plt.grid()
-    # plt.show()
-    # print(y_values.sum())
-    # # print the second half of the array
-    # print(y_values[buffersize-1:])
 
     weights = y_values[buffersize-1:]
     # normalize the weights
