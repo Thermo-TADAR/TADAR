@@ -145,7 +145,3 @@ def MAEwithErrorBand(prediction,ground_truth, section = np.linspace(0, 5.5, 11))
             # add the variation of the error
             mae_var.append(np.var(abs_error[index]))
     return mae, mae_var, section
-
-
-            
-            
